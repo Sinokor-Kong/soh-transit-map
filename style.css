@@ -1,0 +1,272 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #1b1f24;
+  color: #222;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  align-items: stretch;
+}
+
+/* ---------- Input panel (excluded from map capture) ---------- */
+
+.input-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: #f4f5f6;
+  border-right: 1px solid #d3d6d9;
+  padding: 16px;
+  overflow-y: auto;
+  transition: margin-left 0.15s ease;
+}
+
+.input-panel.hidden {
+  margin-left: -300px;
+}
+
+.input-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.input-panel-header h1 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.icon-btn {
+  border: 1px solid #c7cad0;
+  background: #fff;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.show-panel-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 50;
+  border: 1px solid #c7cad0;
+  background: #fff;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.field {
+  margin-bottom: 10px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 3px;
+  color: #444;
+}
+
+.field input, .field select {
+  width: 100%;
+  padding: 6px 7px;
+  font-size: 13px;
+  border: 1px solid #c7cad0;
+  border-radius: 4px;
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+}
+.field-row .field { flex: 1; }
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 14px 0 8px;
+  border-top: 1px solid #d9dbde;
+  padding-top: 10px;
+}
+
+.direction-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.radio-label input { width: auto; margin: 0; }
+
+.duration-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.duration-field label {
+  width: 90px;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  font-weight: 600;
+}
+
+.cp-field {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.cp-field label {
+  width: 34px;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+.cp-field.anchor {
+  background: #fff3c4;
+}
+.cp-field.anchor label {
+  font-weight: 800;
+}
+.cp-field .date-select,
+.cp-field .time-select,
+.duration-field .time-select {
+  flex: none;
+  padding: 4px 1px;
+  font-size: 12px;
+  border: 1px solid #c7cad0;
+  border-radius: 4px;
+  text-align: center;
+}
+.cp-field .date-select { width: 46px; }
+.cp-field .time-select,
+.duration-field .time-select { width: 42px; }
+.time-colon {
+  font-weight: 700;
+  color: #555;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.btn {
+  flex: 1;
+  padding: 9px 8px;
+  border: 1px solid #c7cad0;
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+.btn.primary {
+  background: #1f9d4a;
+  border-color: #1f9d4a;
+  color: #fff;
+}
+.btn:hover { filter: brightness(0.96); }
+
+.hint {
+  font-size: 11px;
+  color: #777;
+  line-height: 1.5;
+  margin-top: 14px;
+}
+
+/* ---------- Map stage (this is what gets captured/exported) ---------- */
+
+.map-wrap {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 24px;
+  background: #1b1f24;
+}
+
+.map-stage {
+  position: relative;
+  width: 892px;
+  height: 688px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+}
+
+.map-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 892px;
+  height: 688px;
+  pointer-events: none;
+  user-select: none;
+  display: block;
+}
+
+.overlay-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* ---------- Draggable label boxes ---------- */
+
+.drag-box {
+  position: absolute;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  white-space: nowrap;
+  font-weight: 800;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.title-box,
+.cp-date-box,
+.vessel-name-box {
+  background: #eceeef;
+  border: 1.3px solid #10151b;
+  border-radius: 3px;
+  padding: 1.5px 5px;
+  font-size: 12.5px;
+  line-height: 1.15;
+  color: #10151b;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+}
+
+.vessel-icon {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
+.vessel-icon img { display: block; }
+
+.arrow-handle {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+}
