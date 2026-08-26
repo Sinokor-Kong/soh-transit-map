@@ -425,7 +425,12 @@
 
   // ---- export map stage as PNG ----
   document.getElementById("exportBtn").addEventListener("click", async () => {
+    // the arrow drag-handles are an editing aid only; keep them out of the exported image
+    arrowHandleStart.classList.add("export-hide");
+    arrowHandleEnd.classList.add("export-hide");
     const canvas = await html2canvas(stage, { backgroundColor: null, scale: 2 });
+    arrowHandleStart.classList.remove("export-hide");
+    arrowHandleEnd.classList.remove("export-hide");
     const blob = await new Promise((resolve) => canvas.toBlob(resolve));
     const vesselName = (document.getElementById("vesselName").value || "VESSEL").trim().replace(/\s+/g, "_");
     const filename = `${vesselName}_SOH_TRANSIT_PLAN.png`;

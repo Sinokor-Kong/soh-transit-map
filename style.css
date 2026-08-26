@@ -265,8 +265,17 @@ html, body {
 }
 .vessel-icon img { display: block; }
 
+/* Visible on screen so they can actually be found and dragged; excluded from the
+   exported PNG (see .export-hide) so the saved image shows only the arrow itself. */
 .arrow-handle {
-  width: 14px;
-  height: 14px;
-  background: transparent;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 212, 0, 0.55);
+  border: 1.5px solid #10151b;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.export-hide {
+  display: none !important;
 }
