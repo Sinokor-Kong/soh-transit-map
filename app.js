@@ -262,6 +262,16 @@
 
   // ---- leader line (icon -> name box) + arrow (vessel -> target CP, with draggable start/end handles) ----
   function drawConnectors() {
+    // nothing to connect to until a valid vessel position has actually been applied --
+    // without this, picking an arrow target before the first "지도에 반영" click would draw
+    // the arrow from the icon's unset (0,0) default position instead of doing nothing.
+    if (vesselIcon.style.visibility === "hidden") {
+      arrowHandleStart.style.visibility = "hidden";
+      arrowHandleEnd.style.visibility = "hidden";
+      svg.innerHTML = "";
+      return;
+    }
+
     const iconC = centerOf(vesselIcon);
     const nameC = { x: vesselNameBox.offsetLeft, y: vesselNameBox.offsetTop + vesselNameBox.offsetHeight / 2 };
     const leaderLine = `<line x1="${iconC.x}" y1="${iconC.y}" x2="${nameC.x}" y2="${nameC.y}" stroke="#8a8f94" stroke-width="1.5" />`;
@@ -375,7 +385,9 @@
 
   document.getElementById("applyBtn").addEventListener("click", applyAll);
   document.getElementById("resetPosBtn").addEventListener("click", resetPositions);
-  document.getElementById("arrowTarget").addEventListener("change", drawConnectors);
+  // applyAll (not just drawConnectors) so picking a target also applies any vessel
+  // name/lat/lon typed in but not yet sent to the map with "지도에 반영"
+  document.getElementById("arrowTarget").addEventListener("change", applyAll);
   arrowWidthInput.addEventListener("input", drawConnectors);
 
   // editing the direction's anchor CP, or any leg duration, auto-fills the rest of the chain
