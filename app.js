@@ -412,20 +412,39 @@
   });
 
   // ---- export map stage as PNG ----
-  document.getElementById("exportBtn").addEventListener("click", () => {
-    html2canvas(stage, { backgroundColor: null, scale: 2 }).then((canvas) => {
-      canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        const vesselName = (document.getElementById("vesselName").value || "VESSEL").trim().replace(/\s+/g, "_");
-        a.href = url;
-        a.download = `${vesselName}_SOH_TRANSIT_PLAN.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      });
-    });
+  document.getElementById("exportBtn").addEventListener("click", async () => {
+    const canvas = await html2canvas(stage, { backgroundColor: null, scale: 2 });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve));
+    const vesselName = (document.getElementById("vesselName").value || "VESSEL").trim().replace(/\s+/g, "_");
+    const filename = `${vesselName}_SOH_TRANSIT_PLAN.png`;
+
+    // Chromium's File System Access API lets the user pick where to save, and remembers
+    // that folder for next time -- the closest a web page can get to a fixed save path,
+    // since a page can never silently write to an arbitrary path on disk (browser security).
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: "PNG Image", accept: { "image/png": [".png"] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") return; // user cancelled the save dialog
+        // fall through to the plain download below on any other error
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
   });
 
   // initial paint
