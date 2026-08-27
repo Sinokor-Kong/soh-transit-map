@@ -1,8 +1,6 @@
 (function () {
   "use strict";
 
-  // ---- Calibration: real lat/lon (deg) -> pixel position on assets/map-bg.png (892x688) ----
-  // Fitted by least squares from 5 known CP positions. px = AX*lon + AY*lat + AC ; py = BX*lon + BY*lat + BC
   const CAL = {
     AX: 384.141825, AY: 36.092978, AC: -21990.764500,
     BX: 19.574403, BY: -553.534439, BC: 13573.274362,
@@ -16,11 +14,20 @@
     "CP-Z": { x: 607.48, y: 500.64 },
   };
 
+  // pixel trace of the green dotted route on the background image, CP-A end to CP-Z end
+  // (extracted directly from the image's dashed-line pixels, endpoints snapped to the CP
+  // tags); INBOUND travels it Z->A (decreasing index), OUTBOUND travels it A->Z (increasing)
+  const ROUTE_PATH = [
+    { x: 458.9, y: 255.6 }, { x: 442.2, y: 236.7 }, { x: 533.0, y: 113.5 },
+    { x: 547.4, y: 99.2 }, { x: 541.6, y: 92.6 }, { x: 600.0, y: 56.8 },
+    { x: 642.5, y: 52.0 }, { x: 696.6, y: 59.4 }, { x: 709.2, y: 89.1 },
+    { x: 702.5, y: 265.2 }, { x: 705.6, y: 276.6 }, { x: 636.6, y: 495.6 },
+    { x: 607.5, y: 500.6 },
+  ];
+
   const STAGE_W = 892, STAGE_H = 688;
   const CP_LIST = ["CP-A", "CP-S", "CP-D", "CP-H", "CP-Z"];
 
-  // default date-box center offset from its CP tag center, measured directly off a
-  // reference SOH Transit Plan screenshot (KakaoTalk_20260824_211545354.png)
   const CP_DATE_OFFSET = {
     "CP-A": { dx: -67, dy: -34 },
     "CP-S": { dx: -68, dy: -24 },
@@ -30,13 +37,9 @@
   };
 
   function project(lat, lon) {
-    return {
-      x: CAL.AX * lon + CAL.AY * lat + CAL.AC,
-      y: CAL.BX * lon + CAL.BY * lat + CAL.BC,
-    };
+    return { x: CAL.AX * lon + CAL.AY * lat + CAL.AC, y: CAL.BX * lon + CAL.BY * lat + CAL.BC };
   }
 
-  // ---- lat/lon text parsing: accepts "26 2'45.29N", "26°2'45.29\"N", or plain decimal ----
   function parseCoord(str) {
     if (!str) return null;
     str = String(str).trim();
@@ -60,8 +63,6 @@
     return value;
   }
 
-  // No year in the UI or in the "M/D HHMMLT" output, so date math uses a fixed dummy year
-  // internally (a leap year, so Feb 29 never breaks) purely to get correct month/day rollover.
   const REF_YEAR = 2024;
 
   function formatCPDateTime(month, day, hh, mm) {
@@ -87,9 +88,6 @@
     document.getElementById("min-" + cp).value = String(date.getMinutes()).padStart(2, "0");
   }
 
-  // The 4 CP-to-CP legs, each with a user-editable duration (default: the SOH schedule).
-  // INBOUND transits CP-Z -> CP-A (time entered at CP-Z, added onward leg by leg); OUTBOUND
-  // transits CP-A -> CP-Z (time entered at CP-A, added onward). Same legs, opposite order.
   const SEGMENTS = [
     { id: "AS", defaultH: 2, defaultM: 0 },
     { id: "SD", defaultH: 1, defaultM: 30 },
@@ -109,15 +107,9 @@
 
   function currentChainConfig() {
     if (currentDirection() === "OUTBOUND") {
-      return {
-        anchor: "CP-A",
-        steps: [["CP-S", "AS"], ["CP-D", "SD"], ["CP-H", "DH"], ["CP-Z", "HZ"]],
-      };
+      return { anchor: "CP-A", steps: [["CP-S", "AS"], ["CP-D", "SD"], ["CP-H", "DH"], ["CP-Z", "HZ"]] };
     }
-    return {
-      anchor: "CP-Z",
-      steps: [["CP-H", "HZ"], ["CP-D", "DH"], ["CP-S", "SD"], ["CP-A", "AS"]],
-    };
+    return { anchor: "CP-Z", steps: [["CP-H", "HZ"], ["CP-D", "DH"], ["CP-S", "SD"], ["CP-A", "AS"]] };
   }
 
   function fillChain() {
@@ -158,10 +150,6 @@
     });
   }
 
-  // 24-hour hour/minute and month/day <select> dropdowns.
-  // Time uses selects (not <input type="time">) because the native time picker follows the
-  // OS locale and can show AM/PM regardless of `lang`. Date uses selects (not <input
-  // type="date">) so no year is ever shown or stored, matching the "M/D HHMMLT" output.
   function populateTimeSelects() {
     CP_LIST.forEach((cp) => {
       const monthSel = document.getElementById("month-" + cp);
@@ -213,6 +201,18 @@
   const moved = { title: false, icon: false, name: false, arrowStart: false, arrowEnd: false };
   CP_LIST.forEach((cp) => (moved[cp] = false));
 
+  let vesselManuallyShown = false;
+  let passageArrow = null; // { points:[{x,y},...], handles:[el,...] }
+  let manualArrows = [];   // [{ points:[{x,y},{x,y}], handles:[el,el] }, ...]
+  let manualArrowSeq = 0;
+
+  // once a box's text has been hand-edited, applyAll() must stop overwriting it with the
+  // auto-computed value (date string, vessel name, etc.)
+  const textEdited = { title: false, name: false };
+  CP_LIST.forEach((cp) => (textEdited[cp] = false));
+  let customBoxes = []; // [{ el, key }, ...] -- freestanding user-added white text boxes
+  let customBoxSeq = 0;
+
   // ---- generic drag support ----
   function makeDraggable(el, key, onMove) {
     el.addEventListener("pointerdown", (e) => {
@@ -231,6 +231,93 @@
         moved[key] = true;
         drawConnectors();
         if (onMove) onMove();
+      }
+      function onPointerUp() {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+      }
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    });
+  }
+
+  // like makeDraggable, but for a dynamically-created arrow point handle that isn't
+  // tracked in `moved` -- the caller's onMove is responsible for updating its own state
+  function makePointDraggable(el, onMove) {
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const startX = e.clientX, startY = e.clientY;
+      const startLeft = el.offsetLeft, startTop = el.offsetTop;
+
+      function onPointerMove(ev) {
+        let nx = startLeft + (ev.clientX - startX);
+        let ny = startTop + (ev.clientY - startY);
+        nx = Math.max(0, Math.min(nx, STAGE_W - el.offsetWidth));
+        ny = Math.max(0, Math.min(ny, STAGE_H - el.offsetHeight));
+        el.style.left = nx + "px";
+        el.style.top = ny + "px";
+        onMove();
+      }
+      function onPointerUp() {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+      }
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    });
+  }
+
+  // like makeDraggable, but double-click switches the box into contenteditable text-entry
+  // mode instead of dragging; single-click-drag keeps working exactly as before once not
+  // editing. opts.onEditEnd(text) fires when editing finishes (blur / Enter / Escape).
+  function makeEditableDraggable(el, key, opts) {
+    opts = opts || {};
+
+    function selectAllText(node) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    function finishEditing() {
+      if (el.contentEditable !== "true") return;
+      el.contentEditable = "false";
+      el.classList.remove("editing");
+      if (opts.onEditEnd) opts.onEditEnd(el.textContent);
+    }
+
+    el.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      el.contentEditable = "true";
+      el.classList.add("editing");
+      el.focus();
+      selectAllText(el);
+    });
+    el.addEventListener("blur", finishEditing);
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); el.blur(); }
+      e.stopPropagation();
+    });
+
+    el.addEventListener("pointerdown", (e) => {
+      if (el.contentEditable === "true") return; // let native caret placement/selection happen
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const startX = e.clientX, startY = e.clientY;
+      const startLeft = el.offsetLeft, startTop = el.offsetTop;
+
+      function onPointerMove(ev) {
+        let nx = startLeft + (ev.clientX - startX);
+        let ny = startTop + (ev.clientY - startY);
+        nx = Math.max(0, Math.min(nx, STAGE_W - el.offsetWidth));
+        ny = Math.max(0, Math.min(ny, STAGE_H - el.offsetHeight));
+        el.style.left = nx + "px";
+        el.style.top = ny + "px";
+        moved[key] = true;
+        drawConnectors();
       }
       function onPointerUp() {
         window.removeEventListener("pointermove", onPointerMove);
@@ -260,63 +347,143 @@
     return { x: p.x + o.dx, y: p.y + o.dy };
   }
 
-  // ---- leader line (icon -> name box) + arrow (vessel -> target CP, with draggable start/end handles) ----
-  function drawConnectors() {
-    // nothing to connect to until a valid vessel position has actually been applied --
-    // without this, picking an arrow target before the first "지도에 반영" click would draw
-    // the arrow from the icon's unset (0,0) default position instead of doing nothing.
-    if (vesselIcon.style.visibility === "hidden") {
-      arrowHandleStart.style.visibility = "hidden";
-      arrowHandleEnd.style.visibility = "hidden";
-      svg.innerHTML = "";
-      return;
-    }
+  function positionVesselNameBox() {
+    if (moved.name) return;
+    const ic = centerOf(vesselIcon);
+    const candidates = [{ dx: 80, dy: 28 }, { dx: -80, dy: 28 }, { dx: 80, dy: -28 }, { dx: -80, dy: -28 }];
+    let best = candidates[0], bestScore = -Infinity;
+    candidates.forEach((c) => {
+      const cx = ic.x + c.dx, cy = ic.y + c.dy;
+      const minDist = Math.min(...Object.values(CP_PX).map((p) => Math.hypot(p.x - cx, p.y - cy)));
+      if (minDist > bestScore) { bestScore = minDist; best = c; }
+    });
+    setCenterPos(vesselNameBox, ic.x + best.dx, ic.y + best.dy);
+  }
 
-    const iconC = centerOf(vesselIcon);
-    const nameC = { x: vesselNameBox.offsetLeft, y: vesselNameBox.offsetTop + vesselNameBox.offsetHeight / 2 };
-    const leaderLine = `<line x1="${iconC.x}" y1="${iconC.y}" x2="${nameC.x}" y2="${nameC.y}" stroke="#8a8f94" stroke-width="1.5" />`;
-
-    const target = document.getElementById("arrowTarget").value;
-
-    if (!target || !CP_PX[target]) {
-      arrowHandleStart.style.visibility = "hidden";
-      arrowHandleEnd.style.visibility = "hidden";
-      svg.innerHTML = leaderLine;
-      return;
-    }
-
-    const t = CP_PX[target];
-    if (!moved.arrowStart) setCenterPos(arrowHandleStart, iconC.x, iconC.y);
-    if (!moved.arrowEnd) {
-      const dx0 = t.x - iconC.x, dy0 = t.y - iconC.y;
-      const len0 = Math.hypot(dx0, dy0) || 1;
-      setCenterPos(arrowHandleEnd, t.x - (dx0 / len0) * 4, t.y - (dy0 / len0) * 4);
-    }
-    arrowHandleStart.style.visibility = "visible";
-    arrowHandleEnd.style.visibility = "visible";
-
-    const start = centerOf(arrowHandleStart);
-    const end = centerOf(arrowHandleEnd);
-    const width = parseFloat(arrowWidthInput.value) || 5;
-    const dx = end.x - start.x, dy = end.y - start.y;
+  // ---- shared arrow rendering: any polyline (2+ points) with a single arrowhead at the end.
+  // an invisible wide "hit" polyline (arrowId set) sits underneath so the whole arrow body,
+  // not just its endpoint handles, can be grabbed and dragged. ----
+  function polylineArrowSVG(points, width, arrowId) {
+    if (!points || points.length < 2) return "";
+    const last = points[points.length - 1];
+    const prev = points[points.length - 2];
+    const dx = last.x - prev.x, dy = last.y - prev.y;
     const len = Math.hypot(dx, dy) || 1;
     const ux = dx / len, uy = dy / len;
     const headLen = width * 3.2, headWidth = width * 1.4;
-    const backX = end.x - ux * headLen, backY = end.y - uy * headLen;
+    const backX = last.x - ux * headLen, backY = last.y - uy * headLen;
     const leftX = backX - uy * headWidth, leftY = backY + ux * headWidth;
     const rightX = backX + uy * headWidth, rightY = backY - ux * headWidth;
-    svg.innerHTML = leaderLine + `
-      <line x1="${start.x}" y1="${start.y}" x2="${backX}" y2="${backY}"
-            stroke="#ffd400" stroke-width="${width}" stroke-linecap="round" />
-      <polygon points="${end.x},${end.y} ${leftX},${leftY} ${rightX},${rightY}" fill="#ffd400" />
-    `;
+    const linePts = points.slice(0, -1).concat([{ x: backX, y: backY }]);
+    const attr = linePts.map((p) => `${p.x},${p.y}`).join(" ");
+    const fullAttr = points.map((p) => `${p.x},${p.y}`).join(" ");
+    const hit = arrowId
+      ? `<polyline points="${fullAttr}" fill="none" stroke="transparent" stroke-width="${Math.max(width + 14, 18)}" stroke-linecap="round" stroke-linejoin="round" class="arrow-hit" data-arrow-id="${arrowId}" style="pointer-events:stroke;cursor:move;" />`
+      : "";
+    return hit + `<polyline points="${attr}" fill="none" stroke="#ffd400" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;" />
+      <polygon points="${last.x},${last.y} ${leftX},${leftY} ${rightX},${rightY}" fill="#ffd400" style="pointer-events:none;" />`;
+  }
+
+  // lets the user grab an arrow's body (not just an endpoint handle) and drag the whole
+  // thing; moves every handle element together and keeps the arrow's points array in sync
+  function bindArrowBodyDrag(hitEl, handleEls, opts) {
+    opts = opts || {};
+    hitEl.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hitEl.setPointerCapture(e.pointerId);
+      if (opts.onDragStart) opts.onDragStart();
+      const startX = e.clientX, startY = e.clientY;
+      const origin = handleEls.map((el) => ({ left: el.offsetLeft, top: el.offsetTop }));
+
+      function onPointerMove(ev) {
+        const dx = ev.clientX - startX, dy = ev.clientY - startY;
+        handleEls.forEach((el, i) => {
+          let nx = origin[i].left + dx, ny = origin[i].top + dy;
+          nx = Math.max(0, Math.min(nx, STAGE_W - el.offsetWidth));
+          ny = Math.max(0, Math.min(ny, STAGE_H - el.offsetHeight));
+          el.style.left = nx + "px";
+          el.style.top = ny + "px";
+        });
+        if (opts.onMove) opts.onMove();
+        drawConnectors();
+      }
+      function onPointerUp() {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+      }
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    });
+  }
+
+  function drawConnectors() {
+    const width = parseFloat(arrowWidthInput.value) || 5;
+    const parts = [];
+    const bindings = [];
+
+    if (vesselIcon.style.visibility !== "hidden") {
+      const iconC = centerOf(vesselIcon);
+      const nameC = { x: vesselNameBox.offsetLeft, y: vesselNameBox.offsetTop + vesselNameBox.offsetHeight / 2 };
+      parts.push(`<line x1="${iconC.x}" y1="${iconC.y}" x2="${nameC.x}" y2="${nameC.y}" stroke="#8a8f94" stroke-width="1.5" />`);
+
+      const target = document.getElementById("arrowTarget").value;
+      if (target && CP_PX[target]) {
+        const t = CP_PX[target];
+        if (!moved.arrowStart) setCenterPos(arrowHandleStart, iconC.x, iconC.y);
+        if (!moved.arrowEnd) {
+          const dx0 = t.x - iconC.x, dy0 = t.y - iconC.y;
+          const len0 = Math.hypot(dx0, dy0) || 1;
+          setCenterPos(arrowHandleEnd, t.x - (dx0 / len0) * 4, t.y - (dy0 / len0) * 4);
+        }
+        arrowHandleStart.style.visibility = "visible";
+        arrowHandleEnd.style.visibility = "visible";
+        parts.push(polylineArrowSVG([centerOf(arrowHandleStart), centerOf(arrowHandleEnd)], width, "cp-target"));
+        bindings.push({
+          id: "cp-target",
+          handleEls: [arrowHandleStart, arrowHandleEnd],
+          opts: { onDragStart: () => { moved.arrowStart = true; moved.arrowEnd = true; } },
+        });
+      } else {
+        arrowHandleStart.style.visibility = "hidden";
+        arrowHandleEnd.style.visibility = "hidden";
+      }
+    } else {
+      arrowHandleStart.style.visibility = "hidden";
+      arrowHandleEnd.style.visibility = "hidden";
+    }
+
+    if (passageArrow) {
+      parts.push(polylineArrowSVG(passageArrow.points, width, "passage"));
+      bindings.push({
+        id: "passage",
+        handleEls: passageArrow.handles,
+        opts: { onMove: () => { passageArrow.points = passageArrow.handles.map(centerOf); } },
+      });
+    }
+    manualArrows.forEach((a, i) => {
+      const id = "manual-" + i;
+      parts.push(polylineArrowSVG(a.points, width, id));
+      bindings.push({
+        id,
+        handleEls: a.handles,
+        opts: { onMove: () => { a.points = a.handles.map(centerOf); } },
+      });
+    });
+
+    svg.innerHTML = parts.join("");
+
+    bindings.forEach(({ id, handleEls, opts }) => {
+      const hit = svg.querySelector(`.arrow-hit[data-arrow-id="${id}"]`);
+      if (hit) bindArrowBodyDrag(hit, handleEls, opts);
+    });
   }
 
   // ---- main apply/render ----
   function applyAll() {
     const name = (document.getElementById("vesselName").value || "VESSEL NAME").trim().toUpperCase();
 
-    titleBox.textContent = `${name} - SOH TRANSIT PLAN`;
+    if (!textEdited.title) titleBox.textContent = `${name} - SOH TRANSIT PLAN`;
     if (!moved.title) setCenterPos(titleBox, STAGE_W / 2, 24);
 
     CP_LIST.forEach((cp) => {
@@ -326,8 +493,10 @@
       const mm = document.getElementById("min-" + cp).value;
       const text = formatCPDateTime(month, day, hh, mm);
       const box = cpBoxes[cp];
-      box.textContent = text || cp + " 일시 미입력";
-      box.style.visibility = text ? "visible" : "hidden";
+      if (!textEdited[cp]) {
+        box.textContent = text || cp + " 일시 미입력";
+        box.style.visibility = text ? "visible" : "hidden";
+      }
       if (!moved[cp]) {
         const a = defaultCpAnchor(cp);
         setCenterPos(box, a.x, a.y);
@@ -339,26 +508,18 @@
     if (lat !== null && lon !== null) {
       vesselIcon.style.visibility = "visible";
       vesselNameBox.style.visibility = "visible";
-      vesselNameBox.textContent = name;
+      if (!textEdited.name) vesselNameBox.textContent = name;
       if (!moved.icon) {
         const p = project(lat, lon);
         setCenterPos(vesselIcon, p.x, p.y);
       }
-      if (!moved.name) {
-        const ic = centerOf(vesselIcon);
-        // try a few candidate offsets and keep whichever lands farthest from every CP tag
-        const candidates = [
-          { dx: 80, dy: 28 }, { dx: -80, dy: 28 },
-          { dx: 80, dy: -28 }, { dx: -80, dy: -28 },
-        ];
-        let best = candidates[0], bestScore = -Infinity;
-        candidates.forEach((c) => {
-          const cx = ic.x + c.dx, cy = ic.y + c.dy;
-          const minDist = Math.min(...Object.values(CP_PX).map((p) => Math.hypot(p.x - cx, p.y - cy)));
-          if (minDist > bestScore) { bestScore = minDist; best = c; }
-        });
-        setCenterPos(vesselNameBox, ic.x + best.dx, ic.y + best.dy);
-      }
+      positionVesselNameBox();
+    } else if (vesselManuallyShown) {
+      vesselIcon.style.visibility = "visible";
+      vesselNameBox.style.visibility = "visible";
+      if (!textEdited.name) vesselNameBox.textContent = name;
+      if (!moved.icon) setCenterPos(vesselIcon, STAGE_W - 70, STAGE_H - 55);
+      positionVesselNameBox();
     } else {
       vesselIcon.style.visibility = "hidden";
       vesselNameBox.style.visibility = "hidden";
@@ -367,18 +528,129 @@
     drawConnectors();
   }
 
+  function showVessel() {
+    vesselManuallyShown = true;
+    applyAll();
+  }
+
   function resetPositions() {
     Object.keys(moved).forEach((k) => (moved[k] = false));
     applyAll();
   }
 
-  // clears every input so the next vessel starts from a blank form, and drops all
-  // dragged label positions back to their computed defaults (resetPositions logic)
+  function clearPassageArrow() {
+    if (passageArrow) passageArrow.handles.forEach((el) => el.remove());
+    passageArrow = null;
+    drawConnectors();
+  }
+
+  // point-to-segment projection used to find where the vessel currently sits along the route
+  function nearestPointOnSegment(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return { x: a.x + t * dx, y: a.y + t * dy };
+  }
+
+  function setPassageArrow(points) {
+    clearPassageArrow();
+    passageArrow = { points, handles: [] };
+    points.forEach((pt, i) => {
+      const el = document.createElement("div");
+      el.className = "drag-box arrow-handle passage-handle";
+      el.title = "PASSAGE 화살표 꺾임점 " + (i + 1);
+      stage.appendChild(el);
+      setCenterPos(el, pt.x, pt.y);
+      makePointDraggable(el, () => {
+        passageArrow.points[i] = centerOf(el);
+        drawConnectors();
+      });
+      passageArrow.handles.push(el);
+    });
+    drawConnectors();
+  }
+
+  function autoPassageArrow() {
+    if (vesselIcon.style.visibility === "hidden") {
+      alert("먼저 선박을 표시하거나(선박 표시 버튼) 좌표를 입력하세요.");
+      return;
+    }
+    // snap to the nearest point on the traced green route, then keep only the remaining
+    // leg in the direction of travel -- this naturally bends wherever the route itself bends
+    const P = centerOf(vesselIcon);
+    let bestSeg = 0, bestDist = Infinity, bestProj = null;
+    for (let i = 0; i < ROUTE_PATH.length - 1; i++) {
+      const a = ROUTE_PATH[i], b = ROUTE_PATH[i + 1];
+      const proj = nearestPointOnSegment(P, a, b);
+      const d = Math.hypot(proj.x - P.x, proj.y - P.y);
+      if (d < bestDist) { bestDist = d; bestSeg = i; bestProj = proj; }
+    }
+    const points = [bestProj];
+    if (currentDirection() === "OUTBOUND") {
+      for (let i = bestSeg + 1; i < ROUTE_PATH.length; i++) points.push({ ...ROUTE_PATH[i] });
+    } else {
+      for (let i = bestSeg; i >= 0; i--) points.push({ ...ROUTE_PATH[i] });
+    }
+    setPassageArrow(points);
+  }
+
+  function addManualArrow() {
+    const idx = manualArrowSeq++;
+    const offset = (idx % 6) * 18;
+    const points = [
+      { x: STAGE_W / 2 - 70 + offset, y: STAGE_H / 2 + 50 + offset },
+      { x: STAGE_W / 2 + 70 + offset, y: STAGE_H / 2 - 50 + offset },
+    ];
+    const arrow = { points, handles: [] };
+    points.forEach((pt, i) => {
+      const el = document.createElement("div");
+      el.className = "drag-box arrow-handle manual-handle";
+      el.title = i === 0 ? "화살표 시작점" : "화살표 끝점";
+      stage.appendChild(el);
+      setCenterPos(el, pt.x, pt.y);
+      makePointDraggable(el, () => {
+        arrow.points[i] = centerOf(el);
+        drawConnectors();
+      });
+      arrow.handles.push(el);
+    });
+    manualArrows.push(arrow);
+    drawConnectors();
+  }
+
+  function clearManualArrows() {
+    manualArrows.forEach((a) => a.handles.forEach((el) => el.remove()));
+    manualArrows = [];
+    drawConnectors();
+  }
+
+  function addTextBox() {
+    const idx = customBoxSeq++;
+    const key = "custom-" + idx;
+    const offset = (idx % 6) * 16;
+    const el = document.createElement("div");
+    el.className = "drag-box cp-date-box";
+    el.textContent = "텍스트 입력";
+    stage.appendChild(el);
+    setCenterPos(el, STAGE_W / 2 + offset, STAGE_H / 2 + 90 + offset);
+    moved[key] = true; // freestanding box has no default layout to fall back to
+    makeEditableDraggable(el, key);
+    customBoxes.push({ el, key });
+  }
+
+  function clearTextBoxes() {
+    customBoxes.forEach(({ el, key }) => {
+      el.remove();
+      delete moved[key];
+    });
+    customBoxes = [];
+  }
+
   function resetForm() {
     document.getElementById("vesselName").value = "";
     document.getElementById("vesselLat").value = "";
     document.getElementById("vesselLon").value = "";
-
     document.getElementById("directionInbound").checked = true;
 
     SEGMENTS.forEach((seg) => {
@@ -396,6 +668,12 @@
     document.getElementById("arrowTarget").value = "";
     arrowWidthInput.value = "5";
 
+    vesselManuallyShown = false;
+    clearPassageArrow();
+    clearManualArrows();
+    clearTextBoxes();
+
+    Object.keys(textEdited).forEach((k) => (textEdited[k] = false));
     Object.keys(moved).forEach((k) => (moved[k] = false));
     updateAnchorHighlight();
     applyAll();
@@ -405,22 +683,26 @@
   populateDurationSelects();
 
   // ---- wire up drag handlers ----
-  makeDraggable(titleBox, "title");
-  makeDraggable(vesselIcon, "icon");
-  makeDraggable(vesselNameBox, "name");
+  makeEditableDraggable(titleBox, "title", { onEditEnd: () => { textEdited.title = true; } });
+  makeDraggable(vesselIcon, "icon", drawConnectors);
+  makeEditableDraggable(vesselNameBox, "name", { onEditEnd: () => { textEdited.name = true; } });
   makeDraggable(arrowHandleStart, "arrowStart");
   makeDraggable(arrowHandleEnd, "arrowEnd");
-  CP_LIST.forEach((cp) => makeDraggable(cpBoxes[cp], cp));
+  CP_LIST.forEach((cp) => makeEditableDraggable(cpBoxes[cp], cp, { onEditEnd: () => { textEdited[cp] = true; } }));
 
   document.getElementById("applyBtn").addEventListener("click", applyAll);
   document.getElementById("resetPosBtn").addEventListener("click", resetPositions);
   document.getElementById("resetFormBtn").addEventListener("click", resetForm);
-  // applyAll (not just drawConnectors) so picking a target also applies any vessel
-  // name/lat/lon typed in but not yet sent to the map with "지도에 반영"
+  document.getElementById("showVesselBtn").addEventListener("click", showVessel);
+  document.getElementById("autoPassageBtn").addEventListener("click", autoPassageArrow);
+  document.getElementById("clearPassageBtn").addEventListener("click", clearPassageArrow);
+  document.getElementById("addManualArrowBtn").addEventListener("click", addManualArrow);
+  document.getElementById("clearManualArrowsBtn").addEventListener("click", clearManualArrows);
+  document.getElementById("addTextBoxBtn").addEventListener("click", addTextBox);
+  document.getElementById("clearTextBoxesBtn").addEventListener("click", clearTextBoxes);
   document.getElementById("arrowTarget").addEventListener("change", applyAll);
   arrowWidthInput.addEventListener("input", drawConnectors);
 
-  // editing the direction's anchor CP, or any leg duration, auto-fills the rest of the chain
   CP_LIST.forEach((cp) => {
     ["month", "day", "hour", "min"].forEach((field) => {
       document.getElementById(field + "-" + cp).addEventListener("change", () => {
@@ -440,7 +722,7 @@
   });
   updateAnchorHighlight();
 
-  // ---- input panel show/hide (kept out of exported/captured image) ----
+  // ---- input panel show/hide ----
   const inputPanel = document.getElementById("inputPanel");
   const toggleBtn = document.getElementById("togglePanelBtn");
   const showBtn = document.getElementById("showPanelBtn");
@@ -455,19 +737,14 @@
 
   // ---- export map stage as PNG ----
   document.getElementById("exportBtn").addEventListener("click", async () => {
-    // the arrow drag-handles are an editing aid only; keep them out of the exported image
-    arrowHandleStart.classList.add("export-hide");
-    arrowHandleEnd.classList.add("export-hide");
+    const handles = document.querySelectorAll(".arrow-handle");
+    handles.forEach((el) => el.classList.add("export-hide"));
     const canvas = await html2canvas(stage, { backgroundColor: null, scale: 2 });
-    arrowHandleStart.classList.remove("export-hide");
-    arrowHandleEnd.classList.remove("export-hide");
+    handles.forEach((el) => el.classList.remove("export-hide"));
     const blob = await new Promise((resolve) => canvas.toBlob(resolve));
     const vesselName = (document.getElementById("vesselName").value || "VESSEL").trim().replace(/\s+/g, "_");
-    const filename = `${vesselName}_SOH_TRANSIT_PLAN.png`;
+    const filename = `${vesselName}_SOH_TRANSIT_PLAN_TEST.png`;
 
-    // Chromium's File System Access API lets the user pick where to save, and remembers
-    // that folder for next time -- the closest a web page can get to a fixed save path,
-    // since a page can never silently write to an arbitrary path on disk (browser security).
     if (window.showSaveFilePicker) {
       try {
         const handle = await window.showSaveFilePicker({
@@ -479,8 +756,7 @@
         await writable.close();
         return;
       } catch (err) {
-        if (err && err.name === "AbortError") return; // user cancelled the save dialog
-        // fall through to the plain download below on any other error
+        if (err && err.name === "AbortError") return;
       }
     }
 

@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SOH Transit Plan Map Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,149 +14,175 @@
 
   <aside class="input-panel" id="inputPanel">
     <div class="input-panel-header">
-      <h1>SOH Transit Plan</h1>
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M12 3.5V6M12 18v2.5M3.5 12H6M18 12h2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M15.2 8.8 12.9 12.9 9 15.2l2.3-4.1z" fill="currentColor"/>
+        </svg>
+        <div class="brand-text">
+          <h1>SOH Transit Plan</h1>
+          <div class="subline">Strait of Hormuz</div>
+        </div>
+      </div>
       <button type="button" id="togglePanelBtn" class="icon-btn" title="입력창 숨기기/보이기">◀</button>
     </div>
 
-    <div class="field">
-      <label for="vesselName">선박명</label>
-      <input type="text" id="vesselName" placeholder="예: SWEDEN PROSPERITY">
-    </div>
+    <details class="panel-section" open>
+      <summary>선박 정보</summary>
 
-    <div class="field-row">
       <div class="field">
-        <label for="vesselLat">선박 위도</label>
-        <input type="text" id="vesselLat" placeholder="26 5'0.0N 또는 26.0833">
+        <label for="vesselName">선박명</label>
+        <input type="text" id="vesselName" placeholder="예: SWEDEN PROSPERITY">
       </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="vesselLat">선박 위도</label>
+          <input type="text" id="vesselLat" placeholder="26 5'0.0N 또는 26.0833">
+        </div>
+        <div class="field">
+          <label for="vesselLon">선박 경도</label>
+          <input type="text" id="vesselLon" placeholder="56 20'0.0E 또는 56.3333">
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button type="button" id="showVesselBtn" class="btn" title="좌표 없이도 선박 아이콘을 지도 오른쪽 하단에 표시하고 자유롭게 드래그할 수 있습니다.">선박 표시 (좌표 없이)</button>
+      </div>
+    </details>
+
+    <details class="panel-section sec-schedule" open>
+      <summary>통항 일정</summary>
+
+      <div class="field direction-toggle">
+        <label class="radio-label">
+          <input type="radio" name="direction" id="directionInbound" value="INBOUND" checked>
+          INBOUND (CP-Z → CP-A)
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="direction" id="directionOutbound" value="OUTBOUND">
+          OUTBOUND (CP-A → CP-Z)
+        </label>
+      </div>
+
+      <p class="hint" style="margin-top:-2px;">굵게 표시된 기준 CP에 시간을 입력하면 나머지가 자동 계산됩니다.</p>
+
+      <div class="field cp-field" data-cp="CP-A">
+        <label for="month-CP-A">CP-A</label>
+        <select id="month-CP-A" class="date-select"></select><span class="time-colon">/</span>
+        <select id="day-CP-A" class="date-select"></select>
+        <select id="hour-CP-A" class="time-select"></select><span class="time-colon">:</span>
+        <select id="min-CP-A" class="time-select"></select>
+      </div>
+      <div class="field cp-field" data-cp="CP-S">
+        <label for="month-CP-S">CP-S</label>
+        <select id="month-CP-S" class="date-select"></select><span class="time-colon">/</span>
+        <select id="day-CP-S" class="date-select"></select>
+        <select id="hour-CP-S" class="time-select"></select><span class="time-colon">:</span>
+        <select id="min-CP-S" class="time-select"></select>
+      </div>
+      <div class="field cp-field" data-cp="CP-D">
+        <label for="month-CP-D">CP-D</label>
+        <select id="month-CP-D" class="date-select"></select><span class="time-colon">/</span>
+        <select id="day-CP-D" class="date-select"></select>
+        <select id="hour-CP-D" class="time-select"></select><span class="time-colon">:</span>
+        <select id="min-CP-D" class="time-select"></select>
+      </div>
+      <div class="field cp-field" data-cp="CP-H">
+        <label for="month-CP-H">CP-H</label>
+        <select id="month-CP-H" class="date-select"></select><span class="time-colon">/</span>
+        <select id="day-CP-H" class="date-select"></select>
+        <select id="hour-CP-H" class="time-select"></select><span class="time-colon">:</span>
+        <select id="min-CP-H" class="time-select"></select>
+      </div>
+      <div class="field cp-field" data-cp="CP-Z">
+        <label for="month-CP-Z">CP-Z</label>
+        <select id="month-CP-Z" class="date-select"></select><span class="time-colon">/</span>
+        <select id="day-CP-Z" class="date-select"></select>
+        <select id="hour-CP-Z" class="time-select"></select><span class="time-colon">:</span>
+        <select id="min-CP-Z" class="time-select"></select>
+      </div>
+
+      <details class="panel-subsection">
+        <summary>구간별 소요 시간 조정</summary>
+        <div class="field duration-field" data-seg="AS">
+          <label>CP-A ↔ CP-S</label>
+          <select id="durH-AS" class="time-select"></select><span class="time-colon">h</span>
+          <select id="durM-AS" class="time-select"></select><span class="time-colon">m</span>
+        </div>
+        <div class="field duration-field" data-seg="SD">
+          <label>CP-S ↔ CP-D</label>
+          <select id="durH-SD" class="time-select"></select><span class="time-colon">h</span>
+          <select id="durM-SD" class="time-select"></select><span class="time-colon">m</span>
+        </div>
+        <div class="field duration-field" data-seg="DH">
+          <label>CP-D ↔ CP-H</label>
+          <select id="durH-DH" class="time-select"></select><span class="time-colon">h</span>
+          <select id="durM-DH" class="time-select"></select><span class="time-colon">m</span>
+        </div>
+        <div class="field duration-field" data-seg="HZ">
+          <label>CP-H ↔ CP-Z</label>
+          <select id="durH-HZ" class="time-select"></select><span class="time-colon">h</span>
+          <select id="durM-HZ" class="time-select"></select><span class="time-colon">m</span>
+        </div>
+      </details>
+    </details>
+
+    <details class="panel-section sec-arrows">
+      <summary>화살표</summary>
+
       <div class="field">
-        <label for="vesselLon">선박 경도</label>
-        <input type="text" id="vesselLon" placeholder="56 20'0.0E 또는 56.3333">
+        <label for="arrowTarget">화살표 방향 (선박 → CP)</label>
+        <select id="arrowTarget">
+          <option value="">표시 안함</option>
+          <option value="CP-A">CP-A</option>
+          <option value="CP-S">CP-S</option>
+          <option value="CP-D">CP-D</option>
+          <option value="CP-H">CP-H</option>
+          <option value="CP-Z">CP-Z</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="arrowWidth">화살표 두께 (전체 공통)</label>
+        <input type="range" id="arrowWidth" min="2" max="14" step="1" value="5">
+      </div>
+
+      <div class="sub-label" title="선박 아이콘을 초록 점선 항로 위 원하는 지점으로 드래그한 뒤 누르면, 그 지점부터 마지막 CP까지 점선을 따라 꺾이는 화살표가 자동으로 그려집니다.">남은 PASSAGE 자동 표기</div>
+      <div class="button-row">
+        <button type="button" id="autoPassageBtn" class="btn primary">자동 표기</button>
+        <button type="button" id="clearPassageBtn" class="btn">삭제</button>
+      </div>
+
+      <div class="sub-label" title="화살표를 지도 중앙에 새로 추가합니다. 몸통을 드래그하면 전체 이동, 끝점 핸들을 드래그하면 모양을 조정합니다.">화살표 직접 그리기</div>
+      <div class="button-row">
+        <button type="button" id="addManualArrowBtn" class="btn">+ 추가</button>
+        <button type="button" id="clearManualArrowsBtn" class="btn">전체 삭제</button>
+      </div>
+    </details>
+
+    <details class="panel-section sec-text">
+      <summary>텍스트 박스</summary>
+      <p class="hint" style="margin-top:-2px;">타이틀·CP·선박이름 박스는 더블클릭하면 바로 수정됩니다(Enter/바깥 클릭으로 완료). 아래 버튼으로 새 박스를 추가할 수 있습니다.</p>
+      <div class="button-row">
+        <button type="button" id="addTextBoxBtn" class="btn">+ 텍스트 박스 추가</button>
+        <button type="button" id="clearTextBoxesBtn" class="btn">전체 삭제</button>
+      </div>
+    </details>
+
+    <div class="panel-section panel-actions">
+      <div class="button-row">
+        <button type="button" id="applyBtn" class="btn primary">지도에 반영</button>
+        <button type="button" id="resetPosBtn" class="btn">라벨 위치 초기화</button>
+      </div>
+      <div class="button-row">
+        <button type="button" id="resetFormBtn" class="btn" title="입력값, 선박 표시 상태, 화살표, 텍스트 박스를 모두 초기화합니다.">새 선박 초기화</button>
+      </div>
+      <div class="button-row">
+        <button type="button" id="exportBtn" class="btn primary">이미지로 저장</button>
       </div>
     </div>
-
-    <div class="section-title">통항 방향</div>
-    <div class="field direction-toggle">
-      <label class="radio-label">
-        <input type="radio" name="direction" id="directionInbound" value="INBOUND" checked>
-        INBOUND (CP-Z → CP-A)
-      </label>
-      <label class="radio-label">
-        <input type="radio" name="direction" id="directionOutbound" value="OUTBOUND">
-        OUTBOUND (CP-A → CP-Z)
-      </label>
-    </div>
-
-    <div class="section-title">구간별 소요 시간</div>
-    <div class="field duration-field" data-seg="AS">
-      <label>CP-A ↔ CP-S</label>
-      <select id="durH-AS" class="time-select"></select>
-      <span class="time-colon">h</span>
-      <select id="durM-AS" class="time-select"></select>
-      <span class="time-colon">m</span>
-    </div>
-    <div class="field duration-field" data-seg="SD">
-      <label>CP-S ↔ CP-D</label>
-      <select id="durH-SD" class="time-select"></select>
-      <span class="time-colon">h</span>
-      <select id="durM-SD" class="time-select"></select>
-      <span class="time-colon">m</span>
-    </div>
-    <div class="field duration-field" data-seg="DH">
-      <label>CP-D ↔ CP-H</label>
-      <select id="durH-DH" class="time-select"></select>
-      <span class="time-colon">h</span>
-      <select id="durM-DH" class="time-select"></select>
-      <span class="time-colon">m</span>
-    </div>
-    <div class="field duration-field" data-seg="HZ">
-      <label>CP-H ↔ CP-Z</label>
-      <select id="durH-HZ" class="time-select"></select>
-      <span class="time-colon">h</span>
-      <select id="durM-HZ" class="time-select"></select>
-      <span class="time-colon">m</span>
-    </div>
-
-    <div class="section-title">CP 통과 예정(완료) 일시</div>
-    <p class="hint" style="margin-top:-4px;">굵게 표시된(기준) CP에 시간을 입력하면 나머지가 자동 계산됩니다.</p>
-
-    <div class="field cp-field" data-cp="CP-A">
-      <label for="month-CP-A">CP-A</label>
-      <select id="month-CP-A" class="date-select"></select>
-      <span class="time-colon">/</span>
-      <select id="day-CP-A" class="date-select"></select>
-      <select id="hour-CP-A" class="time-select"></select>
-      <span class="time-colon">:</span>
-      <select id="min-CP-A" class="time-select"></select>
-    </div>
-    <div class="field cp-field" data-cp="CP-S">
-      <label for="month-CP-S">CP-S</label>
-      <select id="month-CP-S" class="date-select"></select>
-      <span class="time-colon">/</span>
-      <select id="day-CP-S" class="date-select"></select>
-      <select id="hour-CP-S" class="time-select"></select>
-      <span class="time-colon">:</span>
-      <select id="min-CP-S" class="time-select"></select>
-    </div>
-    <div class="field cp-field" data-cp="CP-D">
-      <label for="month-CP-D">CP-D</label>
-      <select id="month-CP-D" class="date-select"></select>
-      <span class="time-colon">/</span>
-      <select id="day-CP-D" class="date-select"></select>
-      <select id="hour-CP-D" class="time-select"></select>
-      <span class="time-colon">:</span>
-      <select id="min-CP-D" class="time-select"></select>
-    </div>
-    <div class="field cp-field" data-cp="CP-H">
-      <label for="month-CP-H">CP-H</label>
-      <select id="month-CP-H" class="date-select"></select>
-      <span class="time-colon">/</span>
-      <select id="day-CP-H" class="date-select"></select>
-      <select id="hour-CP-H" class="time-select"></select>
-      <span class="time-colon">:</span>
-      <select id="min-CP-H" class="time-select"></select>
-    </div>
-    <div class="field cp-field" data-cp="CP-Z">
-      <label for="month-CP-Z">CP-Z</label>
-      <select id="month-CP-Z" class="date-select"></select>
-      <span class="time-colon">/</span>
-      <select id="day-CP-Z" class="date-select"></select>
-      <select id="hour-CP-Z" class="time-select"></select>
-      <span class="time-colon">:</span>
-      <select id="min-CP-Z" class="time-select"></select>
-    </div>
-
-    <div class="field">
-      <label for="arrowTarget">화살표 방향 (선박 → CP)</label>
-      <select id="arrowTarget">
-        <option value="">표시 안함</option>
-        <option value="CP-A">CP-A</option>
-        <option value="CP-S">CP-S</option>
-        <option value="CP-D">CP-D</option>
-        <option value="CP-H">CP-H</option>
-        <option value="CP-Z">CP-Z</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="arrowWidth">화살표 두께</label>
-      <input type="range" id="arrowWidth" min="2" max="14" step="1" value="5">
-    </div>
-
-    <div class="button-row">
-      <button type="button" id="applyBtn" class="btn primary">지도에 반영</button>
-      <button type="button" id="resetPosBtn" class="btn">라벨 위치 초기화</button>
-    </div>
-
-    <div class="button-row">
-      <button type="button" id="resetFormBtn" class="btn">새 선박 초기화</button>
-    </div>
-
-    <div class="button-row">
-      <button type="button" id="exportBtn" class="btn primary">이미지로 저장</button>
-    </div>
-    <p class="hint" style="margin-top:-6px;">Chrome/Edge에서는 저장 위치를 직접 고를 수 있는 창이 뜹니다. 처음 한 번만 원하는 폴더(예: SOH TRANSIT PLAN)를 선택해두면, 그다음부터는 같은 폴더가 기본으로 뜹니다.</p>
-
-    <p class="hint">타이틀/날짜박스, 선박 아이콘, 선박이름박스는 지도 위에서 마우스로 자유롭게 드래그해서 위치를 옮길 수 있습니다. 화살표가 표시되면 화살표 양 끝의 작은 노란 점(손잡이)을 각각 드래그해서 위치와 길이를 조정할 수 있습니다. 이 손잡이는 화면 편집용이며, "이미지로 저장" 시 결과물에는 나오지 않습니다.<br><br>INBOUND는 CP-Z를 기준으로 CP-H/CP-D/CP-S/CP-A가 자동 계산되고, OUTBOUND는 CP-A를 기준으로 CP-S/CP-D/CP-H/CP-Z가 자동 계산됩니다. 구간별 소요 시간은 위에서 직접 수정할 수 있습니다.</p>
   </aside>
 
   <button type="button" id="showPanelBtn" class="show-panel-btn" hidden>입력창 열기 ▶</button>
@@ -183,7 +212,6 @@
   </main>
 
 </div>
-
 <script src="vendor/html2canvas.min.js"></script>
 <script src="app.js"></script>
 </body>
