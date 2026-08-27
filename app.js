@@ -372,6 +372,35 @@
     applyAll();
   }
 
+  // clears every input so the next vessel starts from a blank form, and drops all
+  // dragged label positions back to their computed defaults (resetPositions logic)
+  function resetForm() {
+    document.getElementById("vesselName").value = "";
+    document.getElementById("vesselLat").value = "";
+    document.getElementById("vesselLon").value = "";
+
+    document.getElementById("directionInbound").checked = true;
+
+    SEGMENTS.forEach((seg) => {
+      document.getElementById("durH-" + seg.id).value = String(seg.defaultH);
+      document.getElementById("durM-" + seg.id).value = String(seg.defaultM).padStart(2, "0");
+    });
+
+    CP_LIST.forEach((cp) => {
+      document.getElementById("month-" + cp).value = "";
+      document.getElementById("day-" + cp).value = "";
+      document.getElementById("hour-" + cp).value = "00";
+      document.getElementById("min-" + cp).value = "00";
+    });
+
+    document.getElementById("arrowTarget").value = "";
+    arrowWidthInput.value = "5";
+
+    Object.keys(moved).forEach((k) => (moved[k] = false));
+    updateAnchorHighlight();
+    applyAll();
+  }
+
   populateTimeSelects();
   populateDurationSelects();
 
@@ -385,6 +414,7 @@
 
   document.getElementById("applyBtn").addEventListener("click", applyAll);
   document.getElementById("resetPosBtn").addEventListener("click", resetPositions);
+  document.getElementById("resetFormBtn").addEventListener("click", resetForm);
   // applyAll (not just drawConnectors) so picking a target also applies any vessel
   // name/lat/lon typed in but not yet sent to the map with "지도에 반영"
   document.getElementById("arrowTarget").addEventListener("change", applyAll);
