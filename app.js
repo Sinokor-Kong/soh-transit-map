@@ -40,6 +40,36 @@
     return { x: CAL.AX * lon + CAL.AY * lat + CAL.AC, y: CAL.BX * lon + CAL.BY * lat + CAL.BC };
   }
 
+  // inverse of project(): pixel -> {lat, lon}, solving the 2x2 linear system above
+  function unproject(x, y) {
+    const det = CAL.AY * CAL.BX - CAL.AX * CAL.BY;
+    const dx = x - CAL.AC, dy = y - CAL.BC;
+    const lat = (CAL.BX * dx - CAL.AX * dy) / det;
+    const lon = (CAL.AY * dy - CAL.BY * dx) / det;
+    return { lat, lon };
+  }
+
+  function formatDMS(value, posHem, negHem) {
+    const hem = value >= 0 ? posHem : negHem;
+    const abs = Math.abs(value);
+    const deg = Math.floor(abs);
+    const minFull = (abs - deg) * 60;
+    const min = Math.floor(minFull);
+    const sec = (minFull - min) * 60;
+    return `${deg} ${String(min).padStart(2, "0")}'${sec.toFixed(1)}"${hem}`;
+  }
+
+  // great-circle distance in nautical miles
+  function distanceNM(lat1, lon1, lat2, lon2) {
+    const R_NM = 3440.065;
+    const toRad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toRad;
+    const dLon = (lon2 - lon1) * toRad;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+    return R_NM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   function parseCoord(str) {
     if (!str) return null;
     str = String(str).trim();
@@ -195,6 +225,9 @@
   const arrowHandleStart = document.getElementById("arrowHandleStart");
   const arrowHandleEnd = document.getElementById("arrowHandleEnd");
   const arrowWidthInput = document.getElementById("arrowWidth");
+  const rulerHandleStart = document.getElementById("rulerHandleStart");
+  const rulerHandleEnd = document.getElementById("rulerHandleEnd");
+  const coordReadout = document.getElementById("coordReadout");
   const cpBoxes = {};
   CP_LIST.forEach((cp) => (cpBoxes[cp] = document.getElementById("box-" + cp)));
 
@@ -205,6 +238,7 @@
   let passageArrow = null; // { points:[{x,y},...], handles:[el,...] }
   let manualArrows = [];   // [{ points:[{x,y},{x,y}], handles:[el,el] }, ...]
   let manualArrowSeq = 0;
+  let rulerActive = false;
 
   // once a box's text has been hand-edited, applyAll() must stop overwriting it with the
   // auto-computed value (date string, vessel name, etc.)
@@ -384,6 +418,46 @@
       <polygon points="${last.x},${last.y} ${leftX},${leftY} ${rightX},${rightY}" fill="#ffd400" style="pointer-events:none;" />`;
   }
 
+  // renders the NM ruler: a dashed line with end ticks between the two ruler handles plus
+  // a distance label at the midpoint; marked .no-export so it never appears in the saved PNG
+  function rulerSVG() {
+    const p1 = centerOf(rulerHandleStart), p2 = centerOf(rulerHandleEnd);
+    const c1 = unproject(p1.x, p1.y), c2 = unproject(p2.x, p2.y);
+    const nm = distanceNM(c1.lat, c1.lon, c2.lat, c2.lon);
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const tick = 7;
+    const midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+    const label = `${nm.toFixed(2)} NM`;
+    const boxW = label.length * 6.6 + 12, boxH = 17;
+    return `<g class="no-export">
+      <line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#38bdf8" stroke-width="1.6" stroke-dasharray="6 4" />
+      <line x1="${p1.x - uy * tick}" y1="${p1.y + ux * tick}" x2="${p1.x + uy * tick}" y2="${p1.y - ux * tick}" stroke="#38bdf8" stroke-width="1.6" />
+      <line x1="${p2.x - uy * tick}" y1="${p2.y + ux * tick}" x2="${p2.x + uy * tick}" y2="${p2.y - ux * tick}" stroke="#38bdf8" stroke-width="1.6" />
+      <rect x="${midX - boxW / 2}" y="${midY - boxH / 2}" width="${boxW}" height="${boxH}" rx="3" fill="rgba(10,14,20,0.85)" stroke="#38bdf8" stroke-width="1" />
+      <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#e7ecf1">${label}</text>
+    </g>`;
+  }
+
+  function addRuler() {
+    if (!rulerActive) {
+      setCenterPos(rulerHandleStart, STAGE_W / 2 - 100, STAGE_H / 2);
+      setCenterPos(rulerHandleEnd, STAGE_W / 2 + 100, STAGE_H / 2);
+    }
+    rulerActive = true;
+    rulerHandleStart.style.visibility = "visible";
+    rulerHandleEnd.style.visibility = "visible";
+    drawConnectors();
+  }
+
+  function clearRuler() {
+    rulerActive = false;
+    rulerHandleStart.style.visibility = "hidden";
+    rulerHandleEnd.style.visibility = "hidden";
+    drawConnectors();
+  }
+
   // lets the user grab an arrow's body (not just an endpoint handle) and drag the whole
   // thing; moves every handle element together and keeps the arrow's points array in sync
   function bindArrowBodyDrag(hitEl, handleEls, opts) {
@@ -470,6 +544,8 @@
         opts: { onMove: () => { a.points = a.handles.map(centerOf); } },
       });
     });
+
+    if (rulerActive) parts.push(rulerSVG());
 
     svg.innerHTML = parts.join("");
 
@@ -672,6 +748,7 @@
     clearPassageArrow();
     clearManualArrows();
     clearTextBoxes();
+    clearRuler();
 
     Object.keys(textEdited).forEach((k) => (textEdited[k] = false));
     Object.keys(moved).forEach((k) => (moved[k] = false));
@@ -688,6 +765,8 @@
   makeEditableDraggable(vesselNameBox, "name", { onEditEnd: () => { textEdited.name = true; } });
   makeDraggable(arrowHandleStart, "arrowStart");
   makeDraggable(arrowHandleEnd, "arrowEnd");
+  makePointDraggable(rulerHandleStart, drawConnectors);
+  makePointDraggable(rulerHandleEnd, drawConnectors);
   CP_LIST.forEach((cp) => makeEditableDraggable(cpBoxes[cp], cp, { onEditEnd: () => { textEdited[cp] = true; } }));
 
   document.getElementById("applyBtn").addEventListener("click", applyAll);
@@ -700,8 +779,24 @@
   document.getElementById("clearManualArrowsBtn").addEventListener("click", clearManualArrows);
   document.getElementById("addTextBoxBtn").addEventListener("click", addTextBox);
   document.getElementById("clearTextBoxesBtn").addEventListener("click", clearTextBoxes);
+  document.getElementById("addRulerBtn").addEventListener("click", addRuler);
+  document.getElementById("clearRulerBtn").addEventListener("click", clearRuler);
   document.getElementById("arrowTarget").addEventListener("change", applyAll);
   arrowWidthInput.addEventListener("input", drawConnectors);
+
+  // ---- cursor lat/lon readout, fixed at bottom-center of the map stage ----
+  stage.addEventListener("pointermove", (e) => {
+    const rect = stage.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    if (x < 0 || y < 0 || x > STAGE_W || y > STAGE_H) {
+      coordReadout.style.visibility = "hidden";
+      return;
+    }
+    const { lat, lon } = unproject(x, y);
+    coordReadout.textContent = `${formatDMS(lat, "N", "S")}   ${formatDMS(lon, "E", "W")}`;
+    coordReadout.style.visibility = "visible";
+  });
+  stage.addEventListener("pointerleave", () => { coordReadout.style.visibility = "hidden"; });
 
   CP_LIST.forEach((cp) => {
     ["month", "day", "hour", "min"].forEach((field) => {
@@ -737,7 +832,7 @@
 
   // ---- export map stage as PNG ----
   document.getElementById("exportBtn").addEventListener("click", async () => {
-    const handles = document.querySelectorAll(".arrow-handle");
+    const handles = document.querySelectorAll(".arrow-handle, .no-export");
     handles.forEach((el) => el.classList.add("export-hide"));
     const canvas = await html2canvas(stage, { backgroundColor: null, scale: 2 });
     handles.forEach((el) => el.classList.remove("export-hide"));

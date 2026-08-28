@@ -198,6 +198,7 @@ html, body {
 
 .panel-section.sec-schedule { --dot: var(--amber); }
 .panel-section.sec-arrows { --dot: var(--yellow); }
+.panel-section.sec-ruler { --dot: #38bdf8; }
 .panel-section.sec-text { --dot: #8a93a0; }
 
 .panel-subsection {
@@ -389,11 +390,33 @@ html, body {
 }
 .passage-handle { background: rgba(56, 189, 248, 0.7); }
 .manual-handle { background: rgba(255, 140, 0, 0.7); }
+.ruler-handle { background: rgba(56, 189, 248, 0.85); visibility: hidden; }
 
 .drag-box.editing {
   cursor: text;
   outline: 2px dashed #2f7de1;
   outline-offset: 1px;
+}
+
+/* ---------- Cursor coordinate readout (screen-only, never exported) ---------- */
+
+.coord-readout {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  background: rgba(10, 14, 20, 0.8);
+  color: #e7ecf1;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  z-index: 20;
 }
 
 .export-hide { display: none !important; }
